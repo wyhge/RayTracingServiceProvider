@@ -1,257 +1,394 @@
-#include <tuple>
-#include <vector>
-#include <fstream>
-#include <iostream>
-#include <algorithm>
+#include <SDL3\SDL.h>
 #include <cmath>
-#include <chrono>
+#include <vector>
+#include <algorithm>
+#include <iostream>
+#include <random>
 
-struct vec3 {
-    float x = 0, y = 0, z = 0;
-    vec3() = default;
-    vec3(float x, float y, float z) : x(x), y(y), z(z) {}
+const int WIDTH = 800;
+const int HEIGHT = 600;
+const int MAX_DEPTH = 5;
+const float PI = 3.14159265358979323846f;
 
-    float& operator[](int i) { return (&x)[i]; }
-    const float& operator[](int i) const { return (&x)[i]; }
+// 向量类
+struct Vec3 {
+    float x, y, z;
 
-    vec3 operator*(float v) const { return { x * v, y * v, z * v }; }
-    vec3 operator*(const vec3& v) const { return { x * v.x, y * v.y, z * v.z }; }
-    vec3 operator+(const vec3& v) const { return { x + v.x, y + v.y, z + v.z }; }
-    vec3 operator-(const vec3& v) const { return { x - v.x, y - v.y, z - v.z }; }
-    vec3 operator-() const { return { -x, -y, -z }; }
+    Vec3(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
 
-    float dot(const vec3& v) const { return x * v.x + y * v.y + z * v.z; }
-    float norm() const { return std::sqrt(x * x + y * y + z * z); }
-    vec3 normalized() const {
-        float n = norm();
-        return n > 0 ? (*this) * (1.f / n) : *this;
+    Vec3 operator + (const Vec3& v) const { return Vec3(x + v.x, y + v.y, z + v.z); }
+    Vec3 operator - (const Vec3& v) const { return Vec3(x - v.x, y - v.y, z - v.z); }
+    Vec3 operator * (float f) const { return Vec3(x * f, y * f, z * f); }
+    Vec3 operator / (float f) const { return Vec3(x / f, y / f, z / f); }
+    Vec3 mult(const Vec3& v) const { return Vec3(x * v.x, y * v.y, z * v.z); } // 分量乘法
+
+    float length() const { return std::sqrt(x * x + y * y + z * z); }
+    Vec3 normalize() const { return (*this) / length(); }
+    float dot(const Vec3& v) const { return x * v.x + y * v.y + z * v.z; }
+    Vec3 cross(const Vec3& v) const {
+        return Vec3(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x);
     }
 };
 
-vec3 operator*(float s, const vec3& v) {
-    return v * s;
-}
+// 光线类
+struct Ray {
+    Vec3 origin;
+    Vec3 direction;
 
-vec3 cross(const vec3& v1, const vec3& v2) {
-    return {
-        v1.y * v2.z - v1.z * v2.y,
-        v1.z * v2.x - v1.x * v2.z,
-        v1.x * v2.y - v1.y * v2.x
-    };
-}
+    Ray(const Vec3& o, const Vec3& d) : origin(o), direction(d) {}
 
+    Vec3 pointAt(float t) const {
+        return origin + direction * t;
+    }
+};
+
+// 材质类型
+enum MaterialType { DIFFUSE, METAL, GLASS };
+
+// 材质类
 struct Material {
-    float refractive_index = 1;
-    float albedo[4] = { 2, 0, 0, 0 };
-    vec3 diffuse_color = { 0, 0, 0 };
-    float specular_exponent = 0;
+    MaterialType type;
+    Vec3 albedo;        // 颜色
+    float roughness;    // 金属粗糙度 (0-1)
+    float ior;          // 折射率 (玻璃用)
+
+    Material(MaterialType t, const Vec3& a, float r = 0.0f, float i = 1.5f)
+        : type(t), albedo(a), roughness(r), ior(i) {
+    }
 };
 
-struct Cube {
-    vec3 min_bound;  // 立方体最小顶点
-    vec3 max_bound;  // 立方体最大顶点
+// 球体类
+struct Sphere {
+    Vec3 center;
+    float radius;
     Material material;
-};
 
-const Material cube_material = { 1.0, {1.0f, 0.2f, 0.1f, 0.0f}, {0.2f, 0.7f, 0.2f}, 50.0f };
-
-// 场景对象 (移除了所有球体，只保留一个立方体)
-const std::vector<Cube> cubes = {
-    {{0.5f, -1.5f, -15.0f}, {3.0f, 0.5f, -12.0f}, cube_material}  // 绿色立方体
-};
-
-const std::vector<vec3> lights = {
-    {-20.0f, 20.0f, 20.0f},
-    {30.0f, 50.0f, -25.0f},
-    {30.0f, 20.0f, 30.0f}
-};
-
-vec3 reflect(const vec3& I, const vec3& N) {
-    return I - 2.0f * I.dot(N) * N;
-}
-
-vec3 refract(const vec3& I, const vec3& N, float eta_t, float eta_i = 1.0f) {
-    float cosi = -std::max(-1.0f, std::min(1.0f, I.dot(N)));
-    if (cosi < 0) return refract(I, -N, eta_i, eta_t);
-
-    float eta = eta_i / eta_t;
-    float k = 1 - eta * eta * (1 - cosi * cosi);
-    return k < 0 ? vec3(1, 0, 0) : I * eta + N * (eta * cosi - std::sqrt(k));
-}
-
-// 立方体求交函数
-std::pair<bool, float> ray_cube_intersect(const vec3& orig, const vec3& dir, const Cube& c) {
-    // 计算射线进入和离开立方体的时间
-    float t_min = -1e10f;
-    float t_max = 1e10f;
-    vec3 bounds[2] = { c.min_bound, c.max_bound };
-
-    for (int i = 0; i < 3; i++) {
-        float invD = 1.0f / dir[i];
-        float t0 = (bounds[0][i] - orig[i]) * invD;
-        float t1 = (bounds[1][i] - orig[i]) * invD;
-        if (invD < 0.0f) std::swap(t0, t1);
-        t_min = std::max(t_min, t0);  // 进入时间取最大值
-        t_max = std::min(t_max, t1);  // 离开时间取最小值
-        if (t_max < t_min) return { false, 0.0f };
+    Sphere(const Vec3& c, float r, const Material& m)
+        : center(c), radius(r), material(m) {
     }
 
-    // 找到相交点
-    if (t_min < 0.0f) {
-        if (t_max < 0.0f) return { false, 0.0f };
-        return { true, t_max };
+    // 光线与球体求交
+    bool intersect(const Ray& ray, float& t) const {
+        Vec3 oc = ray.origin - center;
+        float a = ray.direction.dot(ray.direction);
+        float b = 2.0f * oc.dot(ray.direction);
+        float c = oc.dot(oc) - radius * radius;
+        float discriminant = b * b - 4 * a * c;
+
+        if (discriminant < 0) return false;
+
+        float sqrtd = std::sqrt(discriminant);
+        float t0 = (-b - sqrtd) / (2.0f * a);
+        float t1 = (-b + sqrtd) / (2.0f * a);
+
+        if (t0 > 0) {
+            t = t0;
+            return true;
+        }
+        else if (t1 > 0) {
+            t = t1;
+            return true;
+        }
+        return false;
     }
-
-    return { true, t_min };
-}
-
-struct IntersectionResult {
-    bool hit;
-    vec3 point;
-    vec3 normal;
-    Material material;
 };
 
-// 计算立方体相交点的法线
-vec3 calculate_cube_normal(const vec3& point, const Cube& c) {
-    const float epsilon = 0.0001f;
+// 相机类
+struct Camera {
+    Vec3 position;      // 相机位置
+    Vec3 forward;       // 前方向
+    Vec3 up;            // 上方向
+    Vec3 right;         // 右方向
+    float fov;          // 视野角度 (度)
 
-    // 检查点在立方体的哪个面上
-    if (std::abs(point.x - c.min_bound.x) < epsilon) return { -1.0f, 0.0f, 0.0f };
-    if (std::abs(point.x - c.max_bound.x) < epsilon) return { 1.0f, 0.0f, 0.0f };
-    if (std::abs(point.y - c.min_bound.y) < epsilon) return { 0.0f, -1.0f, 0.0f };
-    if (std::abs(point.y - c.max_bound.y) < epsilon) return { 0.0f, 1.0f, 0.0f };
-    if (std::abs(point.z - c.min_bound.z) < epsilon) return { 0.0f, 0.0f, -1.0f };
-    if (std::abs(point.z - c.max_bound.z) < epsilon) return { 0.0f, 0.0f, 1.0f };
+    Camera(const Vec3& pos, const Vec3& target, float fovDeg)
+        : position(pos), fov(fovDeg)
+    {
+        forward = (target - position).normalize();
+        right = forward.cross(Vec3(0, 1, 0)).normalize(); // 假设世界Y轴为上
+        up = right.cross(forward).normalize();
+    }
 
-    // 默认返回上表面法线
-    return { 0.0f, 1.0f, 0.0f };
+    // 生成光线
+    Ray getRay(float u, float v) const {
+        // 转换为弧度
+        float aspect = float(WIDTH) / HEIGHT;
+        float fovScale = std::tan(fov * PI / 360.0f);
+
+        // 计算屏幕上的点
+        Vec3 screenPoint =
+            right * (u * aspect * fovScale) +
+            up * (v * fovScale) +
+            position + forward;
+
+        return Ray(position, (screenPoint - position).normalize());
+    }
+};
+
+// 场景类
+struct Scene {
+    std::vector<Sphere> spheres;
+    Vec3 backgroundColor;
+
+    Scene() : backgroundColor(0.2f, 0.2f, 0.2f) {
+        // 添加球体
+        spheres.push_back(Sphere(Vec3(0, 0, -5), 1.0, Material(DIFFUSE, Vec3(0.8f, 0.3f, 0.3f))));
+        spheres.push_back(Sphere(Vec3(-2.5f, 0, -6), 1.0, Material(METAL, Vec3(0.8f, 0.8f, 0.8f), 0.1f)));
+        spheres.push_back(Sphere(Vec3(2.5f, 0, -6), 1.0, Material(GLASS, Vec3(1.0f, 1.0f, 1.0f), 0.0f, 1.5f)));
+        spheres.push_back(Sphere(Vec3(0, -500.5f, -5), 500.0, Material(DIFFUSE, Vec3(0.2f, 0.8f, 0.2f)))); // 地面
+    }
+
+    // 遍历场景求交
+    bool intersect(const Ray& ray, float& t, int& id) const {
+        float min_t = std::numeric_limits<float>::max();
+        bool hit = false;
+
+        for (int i = 0; i < spheres.size(); i++) {
+            float d;
+            if (spheres[i].intersect(ray, d) && d < min_t) {
+                min_t = d;
+                id = i;
+                hit = true;
+            }
+        }
+
+        t = min_t;
+        return hit;
+    }
+};
+
+// 反射计算
+Vec3 reflect(const Vec3& v, const Vec3& n) {
+    return v - n * (2.0f * v.dot(n));
 }
 
-IntersectionResult scene_intersect(const vec3& orig, const vec3& dir) {
-    vec3 pt, N;
-    Material material;
-    float nearest_dist = 1e10f;
-    bool hit = false;
+// 折射计算
+Vec3 refract(const Vec3& v, const Vec3& n, float ni_over_nt, bool& total_reflection) {
+    Vec3 uv = v.normalize();
+    float dt = uv.dot(n);
+    float discriminant = 1.0f - ni_over_nt * ni_over_nt * (1 - dt * dt);
+    if (discriminant > 0) {
+        total_reflection = false;
+        return (uv - n * dt) * ni_over_nt - n * std::sqrt(discriminant);
+    }
+    else {
+        total_reflection = true;
+        return Vec3(0, 0, 0);
+    }
+}
 
-    // 地面检测
-    if (std::abs(dir.y) > 1e-3f) {
-        float d = -(orig.y + 4.0f) / dir.y;
-        vec3 p = orig + dir * d;
-        if (d > 1e-3f && d < nearest_dist && std::abs(p.x) < 10 && p.z < -10 && p.z > -30) {
-            nearest_dist = d;
-            pt = p;
-            N = vec3(0, 1, 0);
-            material.diffuse_color = (static_cast<int>(0.5f * pt.x + 1000) +
-                static_cast<int>(0.5f * pt.z)) & 1 ?
-                vec3(0.3f, 0.3f, 0.3f) : vec3(0.3f, 0.2f, 0.1f);
-            hit = true;
+// 随机数生成
+std::random_device rd;
+std::mt19937 gen(rd());
+std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+
+float randomFloat() {
+    return dis(gen);
+}
+
+// 计算光线颜色
+Vec3 trace(const Ray& ray, const Scene& scene, int depth) {
+    if (depth >= MAX_DEPTH) return Vec3(0, 0, 0); // 递归终止
+
+    float t; // 交点距离
+    int id;  // 最近物体ID
+
+    if (scene.intersect(ray, t, id)) {
+        const Sphere& obj = scene.spheres[id];
+        Vec3 hitPoint = ray.pointAt(t);
+        Vec3 normal = (hitPoint - obj.center).normalize();
+
+        // 计算阴影偏移点
+        Vec3 offsetPoint = hitPoint + normal * 0.001f;
+
+        switch (obj.material.type) {
+        case DIFFUSE: {
+            // 简单环境光
+            Vec3 color = obj.material.albedo * 0.2f;
+
+            // 添加一个点光源
+            Vec3 lightPos(-5, 5, -3);
+            Vec3 toLight = (lightPos - offsetPoint).normalize();
+
+            // 检查光线是否被阻挡
+            Ray shadowRay(offsetPoint, toLight);
+            float lightDist = (lightPos - offsetPoint).length();
+            bool blocked = false;
+            for (const Sphere& s : scene.spheres) {
+                float tempT;
+                if (s.intersect(shadowRay, tempT) && tempT < lightDist) {
+                    blocked = true;
+                    break;
+                }
+            }
+
+            if (!blocked) {
+                float diff = std::max(0.0f, normal.dot(toLight));
+                color = color + obj.material.albedo * diff * 0.8f;
+            }
+
+            return color;
+        }
+
+        case METAL: {
+            Ray reflected(offsetPoint, reflect(ray.direction, normal));
+            // 添加随机偏移模拟粗糙度
+            Vec3 jitter = Vec3(
+                (randomFloat() - 0.5f) * 2.0f,
+                (randomFloat() - 0.5f) * 2.0f,
+                (randomFloat() - 0.5f) * 2.0f
+            ).normalize() * obj.material.roughness;
+            reflected.direction = (reflected.direction + jitter).normalize();
+            return trace(reflected, scene, depth + 1).mult(obj.material.albedo);
+        }
+
+        case GLASS: {
+            Vec3 outwardNormal;
+            float ni_over_nt;
+            Vec3 attenuation(1, 1, 1);
+            Ray scattered(offsetPoint, Vec3(0, 0, 0));
+
+            if (ray.direction.dot(normal) < 0) { // 外部光线
+                outwardNormal = normal;
+                ni_over_nt = 1.0f / obj.material.ior;
+            }
+            else { // 内部光线
+                outwardNormal = normal * -1.0f;
+                ni_over_nt = obj.material.ior;
+            }
+
+            bool total_reflection;
+            Vec3 refracted = refract(ray.direction, outwardNormal, ni_over_nt, total_reflection);
+
+            if (!total_reflection) {
+                scattered = Ray(offsetPoint, refracted);
+            }
+            else {
+                scattered = Ray(offsetPoint, reflect(ray.direction, normal));
+            }
+
+            return trace(scattered, scene, depth + 1).mult(attenuation);
+        }
         }
     }
 
-    // 立方体检测 (唯一保留的物体)
-    for (const auto& cube : cubes) {
-        auto [intersects, dist] = ray_cube_intersect(orig, dir, cube);
-        if (intersects && dist < nearest_dist) {
-            nearest_dist = dist;
-            pt = orig + dir * dist;
-            N = calculate_cube_normal(pt, cube);
-            material = cube.material;
-            hit = true;
-        }
-    }
-
-    return { hit, pt, N, material };
+    return scene.backgroundColor; // 背景色
 }
 
-vec3 cast_ray(const vec3& orig, const vec3& dir, int depth = 0) {
-    if (depth > 4) return vec3(0.2f, 0.7f, 0.8f); // 背景色
-
-    auto intersection = scene_intersect(orig, dir);
-    if (!intersection.hit) {
-        return vec3(0.2f, 0.7f, 0.8f); // 背景色
-    }
-
-    vec3 point = intersection.point;
-    vec3 N = intersection.normal;
-    Material material = intersection.material;
-
-    vec3 reflect_dir = reflect(dir, N).normalized();
-    vec3 reflect_color = cast_ray(point + N * 1e-3f, reflect_dir, depth + 1);
-
-    vec3 refract_dir = refract(dir, N, material.refractive_index).normalized();
-    vec3 refract_color = cast_ray(point - N * 1e-3f, refract_dir, depth + 1);
-
-    float diffuse = 0.0f;
-    float specular = 0.0f;
-
-    for (const auto& light : lights) {
-        vec3 light_dir = (light - point).normalized();
-        vec3 shadow_orig = point + N * 1e-3f;
-
-        auto shadow_int = scene_intersect(shadow_orig, light_dir);
-        if (shadow_int.hit &&
-            (shadow_int.point - shadow_orig).norm() < (light - shadow_orig).norm()) {
-            continue; // 在阴影中
-        }
-
-        diffuse += std::max(0.0f, light_dir.dot(N));
-
-        vec3 reflect_dir = reflect(-light_dir, N);
-        float cos_alpha = std::max(0.0f, -reflect_dir.dot(dir));
-        specular += std::pow(cos_alpha, material.specular_exponent);
-    }
-
-    vec3 result =
-        material.diffuse_color * diffuse * material.albedo[0] +
-        vec3(1.0f, 1.0f, 1.0f) * specular * material.albedo[1] +
-        reflect_color * material.albedo[2] +
-        refract_color * material.albedo[3];
-
-    // 限制颜色范围
-    for (int i = 0; i < 3; i++) {
-        if (result[i] < 0) result[i] = 0;
-        if (result[i] > 1) result[i] = 1;
-    }
-
-    return result;
+// 自定义的clamp函数
+float clamp(float value, float min, float max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
 }
 
 int main() {
-    const int width = 1024;
-    const int height = 768;
-    const float fov = 1.05f; // 60度视野
-    std::vector<vec3> framebuffer(width * height);
+    // 初始化SDL
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        std::cerr << "SDL初始化失败: " << SDL_GetError() << std::endl;
+        return 1;
+    }
 
-    auto start = std::chrono::high_resolution_clock::now();
+    SDL_Window* window = SDL_CreateWindow("SDL3光线追踪演示",
+        WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
 
-#pragma omp parallel for
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            float dir_x = (x + 0.5f) - width / 2.0f;
-            float dir_y = -(y + 0.5f) + height / 2.0f;
-            float dir_z = -height / (2.0f * std::tan(fov / 2.0f));
-            framebuffer[y * width + x] = cast_ray(vec3(0, 0, 0), vec3(dir_x, dir_y, dir_z).normalized());
+    if (!window) {
+        std::cerr << "窗口创建失败: " << SDL_GetError() << std::endl;
+        SDL_Quit();
+        return 1;
+    }
+
+    // 使用SDL3的标志创建渲染器
+    SDL_Renderer* renderer = SDL_CreateRenderer(window,
+        nullptr);
+
+    if (!renderer) {
+        std::cerr << "渲染器创建失败: " << SDL_GetError() << std::endl;
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // 创建纹理
+    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+    if (!texture) {
+        std::cerr << "纹理创建失败: " << SDL_GetError() << std::endl;
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // 创建场景和相机
+    Scene scene;
+    Camera camera(Vec3(0, 0, 0), Vec3(0, 0, -1), 70.0f);
+
+    // 像素缓冲区
+    std::vector<Uint32> pixels(WIDTH * HEIGHT);
+
+    // 渲染场景
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            // 将像素坐标转换为 -1到1 的范围
+            float u = (x + 0.5f) / WIDTH * 2.0f - 1.0f;
+            float v = (HEIGHT - y - 0.5f) / HEIGHT * 2.0f - 1.0f; // 翻转Y轴
+
+            Ray ray = camera.getRay(u, v);
+            Vec3 color = trace(ray, scene, 0);
+
+            // 使用自定义clamp函数确保颜色值在有效范围内
+            Uint32 r = static_cast<Uint32>(255.0f * clamp(color.x, 0.0f, 1.0f));
+            Uint32 g = static_cast<Uint32>(255.0f * clamp(color.y, 0.0f, 1.0f));
+            Uint32 b = static_cast<Uint32>(255.0f * clamp(color.z, 0.0f, 1.0f));
+
+            pixels[y * WIDTH + x] = (0xFF << 24) | (r << 16) | (g << 8) | b;
         }
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    std::cout << "渲染时间: " << duration.count() << " ms" << std::endl;
+    // 更新纹理
+    SDL_UpdateTexture(texture, nullptr, pixels.data(), WIDTH * sizeof(Uint32));
 
-    std::ofstream ofs("outputcube.ppm", std::ios::binary);
-    ofs << "P6\n" << width << " " << height << "\n255\n";
+    // 渲染循环
+    bool running = true;
+    while (running) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_EVENT_QUIT) {
+                running = false;
+            }
+            if (event.type == SDL_EVENT_KEY_DOWN) {
+                running = false;
+            }
+        }
 
-    for (auto& color : framebuffer) {
-        // Gamma校正
-        color.x = std::sqrt(color.x);
-        color.y = std::sqrt(color.y);
-        color.z = std::sqrt(color.z);
+        // 渲染到屏幕
+        SDL_RenderClear(renderer);
+        SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+        SDL_RenderPresent(renderer);
 
-        ofs << static_cast<char>(255 * std::min(1.0f, color.x))
-            << static_cast<char>(255 * std::min(1.0f, color.y))
-            << static_cast<char>(255 * std::min(1.0f, color.z));
+        SDL_Delay(16); // 约60FPS
     }
+
+    // 清理资源
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 
     return 0;
 }
+
+//#include<SDL.h>
+//
+//int main(int argc, char* argv[])
+//{
+//	//初始化SDL
+//	if (SDL_Init(SDL_INIT_VIDEO) < 0)
+//	{
+//		SDL_Log("can not init SDL:%s", SDL_GetError());
+//		return -1;
+//	}
+//
+//	return 0;
+//}

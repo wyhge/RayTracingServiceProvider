@@ -1,0 +1,76 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "G:\\Cpp2022Test\\RayTracingServiceProvider\\RayTracingServiceProvider\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A7A87876-A6B8-4729-8634-A8AECE08B30C}|RayTracingServiceProvider\\RayTracingServiceProvider.vcxproj|G:\\Cpp2022Test\\RayTracingServiceProvider\\RayTracingServiceProvider\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A7A87876-A6B8-4729-8634-A8AECE08B30C}|RayTracingServiceProvider\\RayTracingServiceProvider.vcxproj|solutionrelative:main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A7A87876-A6B8-4729-8634-A8AECE08B30C}|RayTracingServiceProvider\\RayTracingServiceProvider.vcxproj|C:\\USERS\\YUNHEWANG\\DOWNLOADS\\SDL3-DEVEL-3.2.18-VC\\SDL3-3.2.18\\INCLUDE\\SDL3\\SDL.H||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A7A87876-A6B8-4729-8634-A8AECE08B30C}|RayTracingServiceProvider\\RayTracingServiceProvider.vcxproj|G:\\Cpp2022Test\\RayTracingServiceProvider\\RayTracingServiceProvider\\RayTracingServiceProvider\\testdemo.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A7A87876-A6B8-4729-8634-A8AECE08B30C}|RayTracingServiceProvider\\RayTracingServiceProvider.vcxproj|solutionrelative:RayTracingServiceProvider\\testdemo.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 4,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "testdemo.cpp",
+              "DocumentMoniker": "G:\\Cpp2022Test\\RayTracingServiceProvider\\RayTracingServiceProvider\\RayTracingServiceProvider\\testdemo.cpp",
+              "RelativeDocumentMoniker": "RayTracingServiceProvider\\testdemo.cpp",
+              "ToolTip": "G:\\Cpp2022Test\\RayTracingServiceProvider\\RayTracingServiceProvider\\RayTracingServiceProvider\\testdemo.cpp",
+              "RelativeToolTip": "RayTracingServiceProvider\\testdemo.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACkAAAAHAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-07-28T09:18:05.58Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "SDL.h",
+              "DocumentMoniker": "C:\\Users\\yunhewang\\Downloads\\SDL3-devel-3.2.18-VC\\SDL3-3.2.18\\include\\SDL3\\SDL.h",
+              "ToolTip": "C:\\Users\\yunhewang\\Downloads\\SDL3-devel-3.2.18-VC\\SDL3-3.2.18\\include\\SDL3\\SDL.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-07-28T08:44:02.689Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "main.cpp",
+              "DocumentMoniker": "G:\\Cpp2022Test\\RayTracingServiceProvider\\RayTracingServiceProvider\\main.cpp",
+              "RelativeDocumentMoniker": "main.cpp",
+              "ToolTip": "G:\\Cpp2022Test\\RayTracingServiceProvider\\RayTracingServiceProvider\\main.cpp",
+              "RelativeToolTip": "main.cpp",
+              "ViewState": "AgIAANwAAAAAAAAAAAAcwPEAAAAhAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-07-18T12:31:17.775Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
